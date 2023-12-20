@@ -1,0 +1,5 @@
+POST createExperiment/
+  -> uuid (String)
+
+GET readData?uuid=XXX
+  --> 100 data points in json (JSON)
