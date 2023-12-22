@@ -1,5 +1,19 @@
-POST createExperiment/
-  -> uuid (String)
+DEFINITIONS:
+<- input to Endpoint (POST OR GET)
+-> return of Endpoint
 
-GET readData?uuid=XXX
-  --> 100 data points in json (JSON)
+POST createExperiment/
+  <- jsonArray{[column1, column2, column3 ...]}
+  -> return uuid (String)
+
+when creating an experiment table it should be possible to define columns
+- column1-3 are the names of the columns
+  - e.g. ['time', 'temperature', 'force']
+  --> this would create a table with id, time, temperature, force as columns
+
+GET readData?uuid=XXX[&num=xxx&start=xxx&stop=xxx]
+  <- uuid = unique identifier
+  <- num (not necessary) = amount of data to return IF None => 100
+  <- start (not necessary) = first id from where we fetch
+  <- stop (not necessary) = last id to where we fetch
+  -> return data points (JSON)
