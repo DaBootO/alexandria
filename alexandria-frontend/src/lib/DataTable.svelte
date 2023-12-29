@@ -1,22 +1,30 @@
 <script>
-    // data is json format:
-    // data = {"col1": [x1, x2, ...], "col2": [y1, y2, ...] ...}
+    // data is json array
     export let data;
-
 </script>
 
 <div class="overflow-x-auto">
     <table class="table table-xs table-pin-rows table-pin-cols">
         <thead>
             {#each data as col}
-                <th>{col.col_name}</th>
+                <th class="w-auto">{col.col_name}</th>
+            {/each}
+        </thead>
+        <thead>
+            {#each data as col}
+                <th class="w-auto">{col.type}</th>
+            {/each}
+        </thead>
+        <thead>
+            {#each data as col}
+                <th></th>
             {/each}
         </thead>
         <tbody>
-            {#each data as col}
+            {#each data[0].data as col, i}
                 <tr>
-                    {#each col.data as data}
-                        <th>{data}</th>
+                    {#each data as dat, j}
+                        <th>{dat.data[i]}</th>
                     {/each}
                 </tr>
             {/each}

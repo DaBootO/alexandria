@@ -3,30 +3,20 @@
 </script>
 
 <div>
-    <div class="navbar bg-base-100">
+    <div class="navbar bg-base-200">
         <div class="flex-1">
             <ul class="menu menu-horizontal px-1">
                 <li>
                     <a href="/">Home</a>
                 </li>
                 <li>
-                    <details>
-                        <summary> Data Viewer </summary>
-                        <ul class="p-2 bg-base-100 rounded-t-none">
-                            <li>
-                                <a href="/data-viewer">Table View</a>
-                            </li>
-                            <li>
-                                <a href="/data-viewer">Node View</a>
-                            </li>
-                        </ul>
-                    </details>
+                    <a href="/data-viewer">Data viewer</a>
                 </li>
             </ul>
         </div>
     </div>
 
-    <div class="flex m-2">
+    <div class="flex">
         <slot />
     </div>
 </div>
