@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
-from sqlalchemy import inspect, insert, select, Column, Integer, String, Float
+from sqlalchemy import inspect, insert, select
+from sqlalchemy import Column, Integer, String, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -11,7 +12,7 @@ import uuid
 from pydantic import BaseModel
 
 # debug flag to show exceptions
-DEBUG = True
+DEBUG = False
 
 uri = 'mysql+aiomysql://root:test123@localhost:3306/experiments'
 
@@ -31,6 +32,8 @@ def unwrap_col(value):
     match value.split(".")[0]:
         case "str":
             return Column(String(length=255))
+        case "[str]":
+            return Column(JSON(String(length=255)))
         case "int":
             return Column(Integer)
         case "float":
@@ -45,6 +48,8 @@ def rewrap_col(value):
             return "str"
         case dialect.mysql.types.FLOAT:
             return "float"
+        case dialect.mysql.types.LONGTEXT:
+            return "[str]"
 
 # Database Models
 def create_table_class(table_name: str, cols: dict):
@@ -132,9 +137,9 @@ async def create_experiment(
         
         # read tags from request
         tags_list = experiment.tags
-        tag_data = {"data": [{"uuid": unique_id, "tag": tag} for tag in tags_list]}
+        tag_data = {"data": {"uuid": unique_id, "tag": tags_list}}
         # create relational table
-        RelationalTable = create_table_class(table_name="__relations__", cols={"uuid": "str", "tag": "str"})
+        RelationalTable = create_table_class(table_name="__relations__", cols={"uuid": "str", "tag": "[str]"})
         # if table does not already exist -> create
         if await check_existing_table(RelationalTable):
             await create_table_for_model(engine, RelationalTable)
@@ -231,6 +236,35 @@ async def read_data(
             raw_data = result.fetchall()
             # Transform the query results into the desired JSON format
             data = [{column.name: getattr(row[0], column.name) for column in DynamicTable.__table__.columns} for row in raw_data]
+            return data
+    except Exception as e:
+        if DEBUG:
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/getTags")
+async def get_tags(
+    tag: str = Query(None, title="tag", description="tag identifier (optional)"),
+    db: AsyncSession = Depends(get_db)
+    ):
+    try:
+        # Create an instance of the dynamically created table class
+        table_name = "__relations__"
+        columns_dict = await get_columns_by_table_name(table_name)
+        DynamicTable = create_table_class(table_name=table_name, cols=columns_dict)
+        # Insert data into the table
+        async with db as session:
+            stmt = select(DynamicTable)
+            
+            if tag is not None:
+                tag_list = tag.split(',')
+                for tag in tag_list:
+                    stmt = stmt.where(DynamicTable.tag.contains(tag))
+            
+            result = await session.execute(stmt)
+            raw_data = result.fetchall()
+            # Transform the query results into the desired JSON format
+            data = [{getattr(row[0], "uuid"): getattr(row[0], "tag")} for row in raw_data]
             return data
     except Exception as e:
         if DEBUG:
