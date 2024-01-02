@@ -1,7 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends
-from sqlalchemy import create_engine, inspect, insert, alias, Column, Integer, String, Float
+from fastapi import FastAPI, HTTPException, Depends, Query
+from sqlalchemy import inspect, insert, select, Column, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine.reflection import Inspector
@@ -93,7 +92,10 @@ async def create_table_for_model(engine, model_class):
         await conn.run_sync(model_class.metadata.create_all)
 
 @app.post("/createExperiment/")
-async def create_experiment(experiment: ExperimentCreate, db: AsyncSession = Depends(get_db)):
+async def create_experiment(
+    experiment: ExperimentCreate,
+    db: AsyncSession = Depends(get_db)
+    ):
     """create_experiment
 
     Args:
@@ -127,7 +129,11 @@ async def create_experiment(experiment: ExperimentCreate, db: AsyncSession = Dep
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/insertData/{table_name}")
-async def insert_data(table_name: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def insert_data(
+    uuid: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db)
+    ):
     """insert_data
 
     Args:
@@ -143,8 +149,8 @@ async def insert_data(table_name: str, data: dict, db: AsyncSession = Depends(ge
     """
     try:
         # Create an instance of the dynamically created table class
-        columns_dict = await get_columns_by_table_name(table_name)
-        DynamicTable = create_table_class(table_name=table_name, cols=columns_dict)
+        columns_dict = await get_columns_by_table_name(uuid)
+        DynamicTable = create_table_class(table_name=uuid, cols=columns_dict)
 
         # Insert data into the table
         async with db as session:
@@ -153,6 +159,49 @@ async def insert_data(table_name: str, data: dict, db: AsyncSession = Depends(ge
             await session.commit()
 
         return {"message": "Data inserted successfully"}
+    except Exception as e:
+        # raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/getColumns/{table_name}")
+async def get_columns(
+    uuid: str,
+    db: AsyncSession = Depends(get_db)
+    ):
+    try:
+        # Create an instance of the dynamically created table class
+        columns_dict = await get_columns_by_table_name(uuid)
+        return columns_dict
+    except Exception as e:
+        # raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/readData")
+async def read_data(
+    uuid: str = Query(None, title="UUID", description="The UUID parameter"),
+    num: int = Query(100, title="Num", description="The num parameter (optional)"),
+    start: int = Query(None, title="Start", description="The start parameter (optional)"),
+    stop: int = Query(None, title="Stop", description="The stop parameter (optional)"),
+    db: AsyncSession = Depends(get_db)
+    ):
+    try:
+        # Create an instance of the dynamically created table class
+        columns_dict = await get_columns_by_table_name(uuid)
+        DynamicTable = create_table_class(table_name=uuid, cols=columns_dict)
+        # Insert data into the table
+        async with db as session:
+            stmt = select(DynamicTable)
+            
+            if num is not None and (start is not None and stop is not None):
+                stmt = stmt.where(DynamicTable.id < num)
+            
+            
+            
+            result = await session.execute(stmt)
+            raw_data = result.fetchall()
+            # Transform the query results into the desired JSON format
+            data = [{column.name: getattr(row[0], column.name) for column in DynamicTable.__table__.columns} for row in raw_data]
+            return data
     except Exception as e:
         # raise e
         raise HTTPException(status_code=500, detail=str(e))
