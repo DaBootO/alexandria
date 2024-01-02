@@ -10,6 +10,9 @@ import uuid
 
 from pydantic import BaseModel
 
+# debug flag to show exceptions
+DEBUG = True
+
 uri = 'mysql+aiomysql://root:test123@localhost:3306/experiments'
 
 # Async engine
@@ -61,6 +64,7 @@ def create_table_class(table_name: str, cols: dict):
 # Pydantic Models
 class ExperimentCreate(BaseModel):
     cols: dict
+    tags: list = []
 
 # FastAPI App
 app = FastAPI()
@@ -83,13 +87,16 @@ async def check_existing_table(model_class):
             lambda sync_conn: inspect(sync_conn).get_table_names()
         )
         if model_class.__tablename__ in tables:
-            raise Exception(f'Table {model_class.__tablename__} already exists!')
+            return False
+        return True
 
 async def create_table_for_model(engine, model_class):
     # Create the table for this model if it doesn't exist
-    await check_existing_table(model_class)
-    async with engine.begin() as conn:
-        await conn.run_sync(model_class.metadata.create_all)
+    if await check_existing_table(model_class):
+        async with engine.begin() as conn:
+            await conn.run_sync(model_class.metadata.create_all)
+    else:
+        raise Exception(f'Table {model_class.__tablename__} already exists!')
 
 @app.post("/createExperiment/")
 async def create_experiment(
@@ -105,7 +112,7 @@ async def create_experiment(
                 - "col_name": "type"
                 - types will be unwrapped to special sqlalchemy types
             - tags:
-                - list of tags to be relationaly saved (not yet implemented!)
+                - list of tags to be relationaly saved
 
         db (AsyncSession, optional): Defaults to Depends(get_db).
 
@@ -123,12 +130,23 @@ async def create_experiment(
         # Ensure the table is created
         await create_table_for_model(engine, DynamicTable)
         
+        # read tags from request
+        tags_list = experiment.tags
+        tag_data = {"data": [{"uuid": unique_id, "tag": tag} for tag in tags_list]}
+        # create relational table
+        RelationalTable = create_table_class(table_name="__relations__", cols={"uuid": "str", "tag": "str"})
+        # if table does not already exist -> create
+        if await check_existing_table(RelationalTable):
+            await create_table_for_model(engine, RelationalTable)
+        await insert_data("__relations__", tag_data, db)
         # return the uuid for further inserts etc
         return {"uuid": unique_id}
     except Exception as e:
+        if DEBUG:
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/insertData/{table_name}")
+@app.post("/insertData/{uuid}")
 async def insert_data(
     uuid: str,
     data: dict,
@@ -139,6 +157,11 @@ async def insert_data(
     Args:
         table_name (str): name of the table to be inserted into (uuid)
         data (dict): data as dict from json data in request
+            - {"data": {"col1": "hello", "col2": 3.141}}
+            - data types have to be correct or else "type casting" will
+            occur -> float to int etc.
+            => maybe check?
+            - if data is a list -> concat the elements
         db (AsyncSession, optional): Defaults to Depends(get_db).
 
     Raises:
@@ -152,18 +175,26 @@ async def insert_data(
         columns_dict = await get_columns_by_table_name(uuid)
         DynamicTable = create_table_class(table_name=uuid, cols=columns_dict)
 
+        
         # Insert data into the table
         async with db as session:
-            stmt = insert(DynamicTable).values(**data['data'])
-            await session.execute(stmt)
+        # if multiple dicts exist in a list -> concat
+            if isinstance(data['data'], list):
+                for data_array in data['data']:
+                    stmt = insert(DynamicTable).values(**data_array)
+                    await session.execute(stmt)
+            else:
+                stmt = insert(DynamicTable).values(**data['data'])
+                await session.execute(stmt)
             await session.commit()
 
         return {"message": "Data inserted successfully"}
     except Exception as e:
-        # raise e
+        if DEBUG:
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/getColumns/{table_name}")
+@app.post("/getColumns/{uuid}")
 async def get_columns(
     uuid: str,
     db: AsyncSession = Depends(get_db)
@@ -173,7 +204,8 @@ async def get_columns(
         columns_dict = await get_columns_by_table_name(uuid)
         return columns_dict
     except Exception as e:
-        # raise e
+        if DEBUG:
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/readData")
@@ -201,7 +233,8 @@ async def read_data(
             data = [{column.name: getattr(row[0], column.name) for column in DynamicTable.__table__.columns} for row in raw_data]
             return data
     except Exception as e:
-        # raise e
+        if DEBUG:
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
