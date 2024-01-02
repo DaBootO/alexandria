@@ -1,3 +1,4 @@
 export let CONFIG = {
-    'ip': 'localhost'
+    'ip': 'localhost',
+    'port': 8000
 }
