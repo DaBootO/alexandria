@@ -195,8 +195,6 @@ async def read_data(
             if num is not None and (start is not None and stop is not None):
                 stmt = stmt.where(DynamicTable.id < num)
             
-            
-            
             result = await session.execute(stmt)
             raw_data = result.fetchall()
             # Transform the query results into the desired JSON format
