@@ -24,12 +24,12 @@ async def list_databases_endpoint(
 ):
     if client is None:
         client = CLIENT
-    return await {"databases": list_databases(client, like, ilike, limit, outfile, format)}")
+    return await {"databases": list_databases(client, like, ilike, limit, outfile, format)}
 
 @app.post("/createDatabase")
 async def create_database_endpoint(
-    client = None,
     db_name: str,
+    client = None,
     cluster: Optional[str] = None,
     engine: Optional[str] = None,
     comment: Optional[str] = None,
