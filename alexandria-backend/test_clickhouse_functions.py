@@ -1,7 +1,11 @@
 import re
+import pytest
 from unittest.mock import AsyncMock, MagicMock
 from clickhouse_functions import create_database
 
+pytest_plugins = ('pytest_asyncio',)
+
+@pytest.mark.asyncio
 async def test_create_database_success():
     # Mock the ClickHouse client
     client = AsyncMock()
@@ -15,6 +19,7 @@ async def test_create_database_success():
     # Assert that the result is as expected
     assert result == "Database created: <result>"
 
+@pytest.mark.asyncio
 async def test_create_database_empty_name():
     # Mock the ClickHouse client
     client = AsyncMock()
@@ -25,6 +30,7 @@ async def test_create_database_empty_name():
     # Assert that the result is an error message indicating an empty database name
     assert result == {"error": "Database Name violated the rules. Please make sure that name can not be empty and only alphanumeric characters and underscores are used in the database name."}
 
+@pytest.mark.asyncio
 async def test_create_database_illegal_name():
     # Mock the ClickHouse client
     client = AsyncMock()
@@ -35,6 +41,7 @@ async def test_create_database_illegal_name():
     # Assert that the result is an error message indicating an illegal database name
     assert result == {"error": "Database Name violated the rules. Please make sure that name can not be empty and only alphanumeric characters and underscores are used in the database name."}
 
+@pytest.mark.asyncio
 async def test_create_database_already_exists():
     # Mock the ClickHouse client
     client = AsyncMock()
@@ -45,7 +52,8 @@ async def test_create_database_already_exists():
 
     # Assert that the result is an error message indicating that the database already exists
     assert result == {"error": "Database already exists: mydb"}
-
+    
+@pytest.mark.asyncio
 async def test_create_database_internal_error():
     # Mock the ClickHouse client
     client = AsyncMock()

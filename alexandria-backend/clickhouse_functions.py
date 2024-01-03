@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 async def main():
     client = Client('localhost')
     databases = await list_databases(client)
+    create_database_result = await create_database(client, db_name="test")
     print(databases)
     # await delete_database("test")
     # pass
+
 
 async def delete_database(
     client,
@@ -86,7 +88,8 @@ async def create_database(
         # Log the result (this is just an example, adjust as needed)
         logging.info(f"Database created: {result}")
 
-        return result
+        return {"sucess": result}
+
     except Exception as e:
         if 'already exists' in str(e):
             logging.error(f"Database already exists: {db_name}")
@@ -124,7 +127,7 @@ async def list_databases(
         # Log the result (this is just an example, adjust as needed)
         logging.info(f"List of databases: {result}")
 
-        return result
+        return {"sucess": result}
 
     except Exception as e:
         # Log the error

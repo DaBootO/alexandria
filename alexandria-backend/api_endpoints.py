@@ -3,7 +3,7 @@ from aioch import Client
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends
 
-from clickhouse_functions import list_databases
+from clickhouse_functions import list_databases, create_database
 
 app = FastAPI()
 CLIENT = Client('localhost')
@@ -24,7 +24,11 @@ async def list_databases_endpoint(
 ):
     if client is None:
         client = CLIENT
-    return await {"databases": list_databases(client, like, ilike, limit, outfile, format)}
+    databases = await list_databases(client, like, ilike, limit, outfile, format)
+    if "error" in databases:
+        return {"error": databases["error"]}
+    elif "sucess" in databases:
+        return {"databases": databases}
 
 @app.post("/createDatabase")
 async def create_database_endpoint(
@@ -36,4 +40,8 @@ async def create_database_endpoint(
 ):
     if client is None:
         client = CLIENT
-    return await create_database(client, db_name, cluster, engine, comment)
+    create_database_result = await create_database(client, db_name, cluster, engine, comment)
+    if "error" in create_database_result:
+        return {"error": create_database_result["error"]}
+    elif "sucess" in create_database_result:
+        return {"sucess": f"Database created: {db_name}"}
