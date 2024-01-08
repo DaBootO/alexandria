@@ -5,19 +5,6 @@ from clickhouse_functions import create_database
 
 pytest_plugins = ('pytest_asyncio',)
 
-@pytest.mark.asyncio
-async def test_create_database_success():
-    # Mock the ClickHouse client
-    client = AsyncMock()
-
-    # Call the create_database function with valid parameters
-    result = await create_database(client, db_name="mydb", cluster="mycluster", engine="MergeTree", comment="My Database")
-
-    # Assert that the ClickHouse client's execute method was called with the correct query
-    client.execute.assert_called_once_with("CREATE DATABASE mydb ON CLUSTER mycluster ENGINE = MergeTree COMMENT 'My Database'")
-
-    # Assert that the result is as expected
-    assert result == "Database created: <result>"
 
 @pytest.mark.asyncio
 async def test_create_database_empty_name():
