@@ -28,7 +28,7 @@ async def list_databases_endpoint(
     if "error" in databases:
         return {"error": databases["error"]}
     elif "sucess" in databases:
-        return {"databases": databases}
+        return {"sucess": databases}
 
 @app.post("/createDatabase")
 async def create_database_endpoint(
