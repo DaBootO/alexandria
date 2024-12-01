@@ -48,7 +48,7 @@
         <li>
             <details>
                 <summary> Colors </summary>
-                <ul class="p-2 bg-base-100 rounded-t-none">
+                <ul class="p-2 bg-base-100 rounded-t-none border-neutral-400 border-2">
                     {#each test as t}
                         <li>
                             <ColorPicker bind:hex={$color_array[t.uuid]} on:input={() => handle_color(t.uuid, $color_array[t.uuid])} label={t.uuid} />

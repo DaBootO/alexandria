@@ -1,0 +1,21 @@
+{
+    "name": "jdbc-sink",
+    "config": {
+        "connector.class": "io.aiven.connect.jdbc.JdbcSinkConnector",
+        "tasks.max": "1",
+        "topics": "XYZ",
+        "table.name.format": "${topic}",
+        "connection.url": "jdbc:mariadb://mariadb:3306/experiments",
+        "connection.user": "root",
+        "connection.password": "test123",
+        "auto.create": "true",
+        "auto.evolve": "true",
+        "insert.mode": "insert",
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable": "false",
+        "value.converter.schemas.enable": "false",
+        "pk.mode": "none",
+        "batch.size": "1000"
+    }
+}

@@ -1,32 +1,38 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
+from contextlib import asynccontextmanager
 from sqlalchemy import inspect, insert, select
 from sqlalchemy import Column, Integer, String, Float, JSON
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine.reflection import Inspector
 import sqlalchemy.dialects as dialect
+from sqlalchemy_utils import database_exists, create_database
 
 import uuid
 
 from pydantic import BaseModel
 
 # debug flag to show exceptions
-DEBUG = False
+DEBUG = True
 
+base_uri = 'mysql+aiomysql://root:test123@localhost:3306/'
 uri = 'mysql+aiomysql://root:test123@localhost:3306/experiments'
 
-# Async engine
-engine = create_async_engine(uri)
-inspector = Inspector(engine)
-AsyncSessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
+# !
+# # Async engine
+# engine = create_async_engine(uri)
+# # inspector = Inspector(engine)
+# AsyncSessionLocal = sessionmaker(
+#     bind=engine,
+#     class_=AsyncSession,
+#     expire_on_commit=False
+# )
 
-# Base = declarative_base()
+engine = None
+AsyncSessionLocal = None
 
+# CLASSES AND NEEDED FUNCTIONS
 # matching the string values from a json dict to Column types
 def unwrap_col(value):
     match value.split(".")[0]:
@@ -71,10 +77,30 @@ class ExperimentCreate(BaseModel):
     cols: dict
     tags: list = []
 
-# FastAPI App
-app = FastAPI()
 
-### Dependencies
+### FUNCTIONALITIES
+async def check_base_database():
+    base_engine = create_async_engine(base_uri)
+    async with base_engine.begin() as conn:
+        db = await conn.run_sync(
+            lambda check_db: database_exists(engine.url)
+        )
+        if db:
+            return True
+        else:
+            print("DATABASE DOES NOT EXIST!")
+            test = create_table_class(table_name='experiments')
+            
+            return False
+
+async def create_database(engine, model_class):
+    # Create the table for this model if it doesn't exist
+    if await check_existing_table(model_class):
+        async with engine.begin() as conn:
+            await conn.run_sync(model_class.metadata.create_all)
+    else:
+        raise Exception(f'Table {model_class.__tablename__} already exists!')
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
@@ -92,16 +118,95 @@ async def check_existing_table(model_class):
             lambda sync_conn: inspect(sync_conn).get_table_names()
         )
         if model_class.__tablename__ in tables:
-            return False
-        return True
+            return True
+        return False
+
+# async def create_table_for_model(engine, model_class):
+#     # Create the table for this model if it doesn't exist
+#     if not await check_existing_table(model_class):
+#         async with engine.begin() as conn:
+#             await conn.run_sync(model_class.metadata.create_all)
+#     else:
+#         raise Exception(f'Table {model_class.__tablename__} already exists!')
 
 async def create_table_for_model(engine, model_class):
-    # Create the table for this model if it doesn't exist
-    if await check_existing_table(model_class):
-        async with engine.begin() as conn:
-            await conn.run_sync(model_class.metadata.create_all)
-    else:
-        raise Exception(f'Table {model_class.__tablename__} already exists!')
+    try:
+        if not await check_existing_table(model_class):
+            async with engine.begin() as conn:
+                await conn.run_sync(model_class.metadata.create_all)
+    except Exception as e:
+        print(f"Error creating table: {model_class.__tablename__}, {e}")
+        raise
+
+
+# async def delete_table(engine, model_class):
+#     # Delete a table
+#     if await check_existing_table(model_class):
+#         async with engine.begin() as conn:
+#             await conn.run_sync(model_class.__table__.drop)
+#     else:
+#         raise Exception(f'Table {model_class.__tablename__} does not exist (anymore)!')
+
+async def delete_table(engine, model_class):
+    try:
+        if await check_existing_table(model_class):
+            async with engine.begin() as conn:
+                await conn.run_sync(model_class.metadata.drop_all)
+        else:
+            raise Exception(f'Table {model_class.__tablename__} does not exist!')
+    except Exception as e:
+        print(f"Error deleting table: {model_class.__tablename__}, {e}")
+        raise
+
+
+### ROUTING
+# context manager for startup and stop functionality
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # startup
+#     if await check_base_database():
+#         # create relational table if not exists
+#         RelationalTable = create_table_class(table_name="__relations__", cols={"uuid": "str", "tag": "[str]"})
+#         # if table does not already exist -> create
+#         if not await check_existing_table(RelationalTable):
+#             await create_table_for_model(engine, RelationalTable)
+#         yield
+#     # stop
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global engine
+    global AsyncSessionLocal
+    engine = create_async_engine(uri)
+    AsyncSessionLocal = sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+    # startup
+    if await check_base_database():
+        # create relational table if not exists
+        RelationalTable = create_table_class(table_name="__relations__", cols={"uuid": "str", "tag": "[str]"})
+        # if table does not already exist -> create
+        if not await check_existing_table(RelationalTable):
+            await create_table_for_model(RelationalTable)
+    yield
+    # shutdown
+    await engine.dispose()
+
+# FastAPI App
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/")
+async def get_index():
+    """check if Server is running
+
+    Returns:
+        json: success message
+    """
+    return {"message": "Server is Running"}
+
+# tables
 
 @app.post("/createExperiment/")
 async def create_experiment(
@@ -138,14 +243,29 @@ async def create_experiment(
         # read tags from request
         tags_list = experiment.tags
         tag_data = {"data": {"uuid": unique_id, "tag": tags_list}}
-        # create relational table
-        RelationalTable = create_table_class(table_name="__relations__", cols={"uuid": "str", "tag": "[str]"})
-        # if table does not already exist -> create
-        if await check_existing_table(RelationalTable):
-            await create_table_for_model(engine, RelationalTable)
+
         await insert_data("__relations__", tag_data, db)
         # return the uuid for further inserts etc
         return {"uuid": unique_id}
+    except Exception as e:
+        if DEBUG:
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/deleteExperiment/{uuid}")
+async def delete_experiment(
+    uuid: str,
+    db: AsyncSession = Depends(get_db)
+    ):
+    try:
+        cols = await get_columns_by_table_name(uuid)
+        # Create a dynamic table class
+        DynamicTable = create_table_class(table_name=uuid, cols=cols)
+        # delete table
+        await delete_table(engine, DynamicTable)
+        
+        return {"message": f"deleted table with uuid = {uuid}",
+                "deleted_uuid": uuid}
     except Exception as e:
         if DEBUG:
             raise e
@@ -273,5 +393,4 @@ async def get_tags(
 
 if __name__ == "__main__":
     import uvicorn
-    print("starting")
     uvicorn.run(app, host="0.0.0.0", port=8000)
